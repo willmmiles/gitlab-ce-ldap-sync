@@ -552,6 +552,16 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
                     } else if (!$config["gitlab"]["instances"][$instance]["token"] = trim($config["gitlab"]["instances"][$instance]["token"])) {
                         $addProblem("error", sprintf("gitlab->instances->%s->token not specified.", $instance));
                     }
+
+                    if (!array_key_exists("groupParent", $config["gitlab"]["instances"][$instance])) {
+                        $addProblem("warning", sprintf("gitlab->instances->%s->groupParent missing. (Assuming none.)", $instance));
+                        $config["gitlab"]["instances"][$instance]["groupParent"] = "";
+                    } else if (null === $config["gitlab"]["instances"][$instance]["groupParent"]) {
+                        $config["gitlab"]["instances"][$instance]["groupParent"] = "";
+                    } else if (!is_string($config["gitlab"]["instances"][$instance]["groupParent"])) {
+                        $addProblem("error", sprintf("gitlab->instances->%s->groupParent is not a string.", $instance));    
+                    }
+                    $config["gitlab"]["instances"][$instance]["groupParent"] = trim($config["gitlab"]["instances"][$instance]["groupParent"]);
                 }
             }
             // >> Gitlab instances
@@ -1144,6 +1154,14 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
             "updateNum" => 0,
         ];
 
+        // Identify parent group, if needed
+        $gitlabParentGroup = null;
+        if (!empty($gitlabConfig["groupParent"])) {
+            $parent = $gitlab->api("groups")->show($gitlabConfig["groupParent"]);
+            $gitlabParentGroup = $parent["id"];
+            $this->logger->notice(sprintf("Located parent group %s id: %d.",$gitlabConfig["groupParent"],$gitlabParentGroup));
+        }
+
         // Find all existing Gitlab groups
         $this->logger->notice("Finding all existing Gitlab groups...");
         $p = 0;
@@ -1192,6 +1210,11 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
                     continue; // The Gitlab users group should never be updated from LDAP.
                 }
 
+                if ($gitlabParentGroup != $gitlabGroup["parent_id"]) {
+                    $this->logger->info(sprintf("Skipping subgroup #%d \"%s\" [%s] with non-matching parent.", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
+                    continue;
+                }
+
                 $this->logger->info(sprintf("Found Gitlab group #%d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
                 if (isset($groupsSync["found"][$gitlabGroupId]) || $this->in_array_i($gitlabGroupName, $groupsSync["found"])) {
                     $this->logger->warning(sprintf("Duplicate Gitlab group %d \"%s\" [%s].", $gitlabGroupId, $gitlabGroupName, $gitlabGroupPath));
@@ -1237,7 +1260,7 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
             $this->logger->info(sprintf("Creating Gitlab group \"%s\" [%s].", $gitlabGroupName, $gitlabGroupPath));
             $gitlabGroup = null;
 
-            !$this->dryRun ? ($gitlabGroup = $gitlab->api("groups")->create($gitlabGroupName, $gitlabGroupPath)) : $this->logger->warning("Operation skipped due to dry run.");
+            !$this->dryRun ? ($gitlabGroup = $gitlab->api("groups")->create($gitlabGroupName, $gitlabGroupPath, null, 'private', null, null, $gitlabParentGroup)) : $this->logger->warning("Operation skipped due to dry run.");
 
             $gitlabGroupId = (is_array($gitlabGroup) && isset($gitlabGroup["id"]) && is_int($gitlabGroup["id"])) ? $gitlabGroup["id"] : sprintf("dry:%s", $gitlabGroupPath);
             $groupsSync["new"][$gitlabGroupId] = $gitlabGroupName;

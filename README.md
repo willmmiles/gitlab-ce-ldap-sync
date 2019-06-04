@@ -347,6 +347,11 @@ gitlab_rails['ldap_servers'] = {
 
 ...you will likely need to specify it as "ldapmain" for this setting.
 
+###### groupParent *(string)*
+
+Specify the name of the parent group to which LDAP groups will be synchronized as subgroups.  If empty, LDAP groups are synchronized as top-level groups.
+
+
 ## Running
 
 Once you've configured this tool you can run it from a CLI using:
