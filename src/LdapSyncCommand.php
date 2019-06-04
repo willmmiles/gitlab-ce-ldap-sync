@@ -976,6 +976,18 @@ class LdapSyncCommand extends \Symfony\Component\Console\Command\Command
                     continue; // The Gitlab root user should never be updated from LDAP.
                 }
 
+                $has_ldap_identity = false;
+                foreach($gitlabUser["identities"] as $identity) {
+                    if ($gitlabConfig["ldapServerName"] == $identity["provider"]) {
+                        $has_ldap_identity = true;
+                        break;
+                    }                    
+                }
+                if (!$has_ldap_identity) {
+                    $this->logger->info(sprintf("Ignoring Gitlab user #%d \"%s\" from other provider.", $gitlabUserId, $gitlabUserName));
+                    continue;
+                }
+
                 $this->logger->info(sprintf("Found Gitlab user #%d \"%s\".", $gitlabUserId, $gitlabUserName));
                 if (isset($usersSync["found"][$gitlabUserId]) || $this->in_array_i($gitlabUserName, $usersSync["found"])) {
                     $this->logger->warning(sprintf("Duplicate Gitlab user #%d \"%s\".", $gitlabUserId, $gitlabUserName));
